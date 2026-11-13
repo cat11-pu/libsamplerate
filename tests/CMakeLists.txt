@@ -21,6 +21,10 @@ add_executable(misc_test misc_test.c util.c util.h)
 target_link_libraries(misc_test PRIVATE samplerate)
 add_test(NAME misc_test COMMAND misc_test WORKING_DIRECTORY ${PROJECT_BINARY_DIR}/src)
 
+add_executable(short_input_test short_input_test.c util.c util.h)
+target_link_libraries(short_input_test PRIVATE samplerate)
+add_test(NAME short_input_test COMMAND short_input_test WORKING_DIRECTORY ${PROJECT_BINARY_DIR}/src)
+
 add_executable(termination_test termination_test.c util.c util.h)
 target_link_libraries(termination_test PRIVATE samplerate)
 add_test(NAME termination_test COMMAND termination_test WORKING_DIRECTORY ${PROJECT_BINARY_DIR}/src)

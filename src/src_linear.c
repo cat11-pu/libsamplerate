@@ -119,8 +119,12 @@ linear_vari_process (SRC_STATE *state, SRC_DATA *data)
 #endif
 
 		for (ch = 0 ; ch < state->channels ; ch++)
-		{	data->data_out [priv->out_gen] = (float) (data->data_in [priv->in_used - state->channels + ch] + input_index *
-						((double) data->data_in [priv->in_used + ch] - data->data_in [priv->in_used - state->channels + ch])) ;
+		{	const float prev = (priv->in_used >= state->channels)
+				? data->data_in [priv->in_used - state->channels + ch]
+				: priv->last_value [ch] ;
+
+			data->data_out [priv->out_gen] = (float) (prev + input_index *
+							((double) data->data_in [priv->in_used + ch] - prev)) ;
 			priv->out_gen ++ ;
 			} ;
 

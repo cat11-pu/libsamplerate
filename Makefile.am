@@ -89,6 +89,7 @@ TESTS = \
 	tests/nullptr_test \
 	tests/reset_test \
 	tests/simple_test \
+	tests/short_input_test \
 	tests/snr_bw_test \
 	tests/termination_test \
 	tests/throughput_test \
@@ -112,6 +113,9 @@ tests_callback_hang_test_LDADD = src/libsamplerate.la
 
 tests_simple_test_SOURCES = tests/simple_test.c tests/util.c tests/util.h
 tests_simple_test_LDADD = src/libsamplerate.la
+
+tests_short_input_test_SOURCES = tests/short_input_test.c tests/util.c tests/util.h
+tests_short_input_test_LDADD = src/libsamplerate.la
 
 tests_reset_test_SOURCES = tests/reset_test.c tests/util.c tests/util.h
 tests_reset_test_LDADD = src/libsamplerate.la
