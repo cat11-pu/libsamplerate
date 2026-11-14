@@ -72,6 +72,24 @@ add_executable(float_short_test float_short_test.c)
 target_link_libraries(float_short_test PRIVATE samplerate)
 add_test(NAME float_short_test COMMAND float_short_test WORKING_DIRECTORY ${PROJECT_BINARY_DIR}/src)
 
+add_executable(property_test property_test.c)
+target_link_libraries(property_test PRIVATE samplerate)
+add_test(NAME property_test COMMAND property_test WORKING_DIRECTORY ${PROJECT_BINARY_DIR}/src)
+set_tests_properties(property_test PROPERTIES TIMEOUT 600)
+
+add_executable(property_test_inject property_test.c)
+target_compile_definitions(property_test_inject PRIVATE PROPERTY_TEST_INJECT=1)
+target_link_libraries(property_test_inject PRIVATE samplerate)
+add_test(NAME property_test_shrinker
+  COMMAND property_test_inject --selftest
+  WORKING_DIRECTORY ${PROJECT_BINARY_DIR}/src)
+
+add_executable(property_edge_repro property_edge_repro.c)
+target_link_libraries(property_edge_repro PRIVATE samplerate)
+add_test(NAME property_edge_repro
+  COMMAND property_edge_repro
+  WORKING_DIRECTORY ${PROJECT_BINARY_DIR}/src)
+
 add_executable(snr_bw_test snr_bw_test.c calc_snr.c util.c util.h)
 target_link_libraries(snr_bw_test
   PRIVATE
