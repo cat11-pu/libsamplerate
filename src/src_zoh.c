@@ -86,7 +86,9 @@ zoh_vari_process (SRC_STATE *state, SRC_DATA *data)
 		if (priv->in_used + state->channels * input_index >= priv->in_count)
 			break ;
 
-		if (priv->out_count > 0 && fabs (state->last_ratio - data->src_ratio) > SRC_MIN_RATIO_DIFF)
+		if (state->ratio_block_active)
+			src_ratio = src_ratio_current (state) ;
+		else if (priv->out_count > 0 && fabs (state->last_ratio - data->src_ratio) > SRC_MIN_RATIO_DIFF)
 			src_ratio = state->last_ratio + priv->out_gen * (data->src_ratio - state->last_ratio) / priv->out_count ;
 
 		for (ch = 0 ; ch < state->channels ; ch++)
@@ -95,7 +97,7 @@ zoh_vari_process (SRC_STATE *state, SRC_DATA *data)
 			} ;
 
 		/* Figure out the next index. */
-		input_index += 1.0 / src_ratio ;
+		input_index += src_ratio_step (state, src_ratio) ;
 		} ;
 
 	rem = fmod_one (input_index) ;
@@ -105,7 +107,9 @@ zoh_vari_process (SRC_STATE *state, SRC_DATA *data)
 	/* Main processing loop. */
 	while (priv->out_gen < priv->out_count && priv->in_used + state->channels * input_index <= priv->in_count)
 	{
-		if (priv->out_count > 0 && fabs (state->last_ratio - data->src_ratio) > SRC_MIN_RATIO_DIFF)
+		if (state->ratio_block_active)
+			src_ratio = src_ratio_current (state) ;
+		else if (priv->out_count > 0 && fabs (state->last_ratio - data->src_ratio) > SRC_MIN_RATIO_DIFF)
 			src_ratio = state->last_ratio + priv->out_gen * (data->src_ratio - state->last_ratio) / priv->out_count ;
 
 		for (ch = 0 ; ch < state->channels ; ch++)
@@ -114,7 +118,7 @@ zoh_vari_process (SRC_STATE *state, SRC_DATA *data)
 			} ;
 
 		/* Figure out the next index. */
-		input_index += 1.0 / src_ratio ;
+		input_index += src_ratio_step (state, src_ratio) ;
 		rem = fmod_one (input_index) ;
 
 		priv->in_used += state->channels * psf_lrint (input_index - rem) ;

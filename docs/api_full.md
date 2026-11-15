@@ -11,6 +11,8 @@ SRC_STATE* src_new (int converter_type, int channels, int *error) ;
 SRC_STATE* src_delete (SRC_STATE *state) ;
 
 int src_process (SRC_STATE *state, SRC_DATA *data) ;
+int src_process_variable (SRC_STATE *state, SRC_DATA *data,
+                          double ratio_start, double ratio_end) ;
 int src_reset (SRC_STATE *state) ;
 int src_set_ratio (SRC_STATE *state, double new_ratio) ;
 ```
@@ -98,6 +100,38 @@ consumed to generate the provided number of output frames.
 The **src\_process** function returns non-zero if an error occurs. The
 non-zero error return value can be decoded into a text string using the
 function documented [here](api_misc.md#error-reporting).
+
+## Variable Ratio Process
+
+```c
+int src_process_variable (SRC_STATE *state, SRC_DATA *data,
+                          double ratio_start, double ratio_end) ;
+```
+
+**src\_process\_variable** processes one logical input block while varying the
+conversion ratio linearly with input position from **ratio\_start** at the
+beginning of the block to **ratio\_end** at the end of the block. It is intended
+for time stretching and other applications where the ratio changes at block
+boundaries.
+
+On the first call for a block, **input\_frames** is the full block length.
+If **output\_frames** fills before the block has been consumed, call the
+function again with the remaining input and the same ratio endpoints. The
+input position, ratio ramp and converter history continue across calls, so call
+boundaries do not reset the phase or produce a discontinuity. The function
+stores **ratio\_end** in **data->src\_ratio**.
+
+The output length for a block is determined by the integral of the ratio over
+the input block. Fractional phase is carried into the next block rather than
+rounded per call, so long streams do not accumulate a length error. For
+example, a block of `N` frames with endpoints `r0` and `r1` produces
+approximately `N * (r0 + r1) / 2` output frames, independent of the
+**output\_frames** size used to consume it.
+
+Both ratios must be in the range `[1/256, 256]`. A constant ratio block can be
+requested by passing the same value for **ratio\_start** and **ratio\_end**.
+When the final input block has been consumed, flush the converter as usual by
+calling **src\_process** with `input_frames == 0` and `end_of_input == 1`.
 
 ## Reset
 

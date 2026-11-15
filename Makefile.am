@@ -92,7 +92,8 @@ TESTS = \
 	tests/snr_bw_test \
 	tests/termination_test \
 	tests/throughput_test \
-	tests/varispeed_test
+	tests/varispeed_test \
+	tests/variable_ratio_test
 
 check_PROGRAMS = \
 	$(TESTS) \
@@ -136,6 +137,9 @@ tests_downsample_test_LDADD = src/libsamplerate.la
 tests_varispeed_test_SOURCES = tests/varispeed_test.c tests/util.c tests/util.h tests/calc_snr.c
 tests_varispeed_test_CFLAGS = $(FFTW3_CFLAGS)
 tests_varispeed_test_LDADD = src/libsamplerate.la $(FFTW3_LIBS)
+
+tests_variable_ratio_test_SOURCES = tests/variable_ratio_test.c tests/util.c tests/util.h
+tests_variable_ratio_test_LDADD = src/libsamplerate.la
 
 tests_clone_test_SOURCES = tests/clone_test.c tests/util.c tests/util.h
 tests_clone_test_LDADD = src/libsamplerate.la

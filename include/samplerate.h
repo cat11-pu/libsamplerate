@@ -86,6 +86,18 @@ SRC_STATE* src_delete (SRC_STATE *state) ;
 int src_process (SRC_STATE *state, SRC_DATA *data) ;
 
 /*
+**	Process one logical input block with a ratio ramp. The ratio is
+**	interpolated linearly with input position from ratio_start at the
+**	beginning of the block to ratio_end at the end of the block.
+**
+**	If the output buffer fills before all input frames are consumed, call
+**	this function again with the remaining input and the same ratio range.
+**	The ramp and converter phase continue across calls.
+*/
+int src_process_variable (SRC_STATE *state, SRC_DATA *data,
+			double ratio_start, double ratio_end) ;
+
+/*
 **	Callback based processing function. Read up to frames worth of data from
 **	the converter int *data and return frames read or -1 on error.
 */
@@ -186,4 +198,3 @@ void src_float_to_int_array (const float *in, int *out, int len) ;
 #endif	/* __cplusplus */
 
 #endif	/* SAMPLERATE_H */
-

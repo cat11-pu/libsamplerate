@@ -158,6 +158,18 @@ struct SRC_STATE_tag
 
 	double	last_ratio, last_position ;
 
+	/* Variable ratio state for the current logical input block. The ratio
+	** ramp is driven by the input position, not by the size of the output
+	** buffer supplied to a particular src_process () call. */
+	double	ratio_block_start, ratio_block_target, ratio_block_position, ratio_block_carry ;
+	double	ratio_pending_start, ratio_pending_target ;
+	long	ratio_block_frames, ratio_block_input_used ;
+	long	ratio_pending_frames, ratio_pending_input_used ;
+	bool	ratio_block_active ;
+	bool	ratio_pending ;
+	bool	ratio_activated_this_call ;
+	bool	ratio_legacy_mode ;
+
 	SRC_ERROR	error ;
 	int		channels ;
 
@@ -247,6 +259,107 @@ is_bad_src_ratio (double ratio)
 {	return (ratio < (1.0 / SRC_MAX_RATIO) || ratio > (1.0 * SRC_MAX_RATIO)) ;
 } /* is_bad_src_ratio */
 
+static inline void
+src_ratio_block_begin (SRC_STATE *state, double start, double target, long frames)
+{	state->ratio_block_start = start ;
+	state->ratio_block_target = target ;
+	state->ratio_block_position = state->ratio_block_carry ;
+	state->ratio_block_carry = 0.0 ;
+	state->ratio_block_frames = frames ;
+	state->ratio_block_input_used = 0 ;
+	state->ratio_block_active = true ;
+	state->ratio_pending = false ;
+	state->ratio_pending_input_used = 0 ;
+	state->ratio_activated_this_call = false ;
+} /* src_ratio_block_begin */
+
+static inline void
+src_ratio_block_set_pending (SRC_STATE *state, double start, double target, long frames)
+{	state->ratio_pending_start = start ;
+	state->ratio_pending_target = target ;
+	state->ratio_pending_frames = frames ;
+	state->ratio_pending_input_used = 0 ;
+	state->ratio_pending = true ;
+} /* src_ratio_block_set_pending */
+
+static inline void
+src_ratio_block_activate_pending (SRC_STATE *state)
+{	double carry ;
+
+	if (!state->ratio_pending)
+		return ;
+
+	carry = state->ratio_block_position - state->ratio_block_frames ;
+	if (carry < 0.0)
+		carry = 0.0 ;
+
+	state->ratio_block_start = state->ratio_pending_start ;
+	state->ratio_block_target = state->ratio_pending_target ;
+	state->ratio_block_position = carry ;
+	state->ratio_block_frames = state->ratio_pending_frames ;
+	state->ratio_block_input_used = state->ratio_pending_input_used ;
+	state->ratio_pending_input_used = 0 ;
+	state->ratio_block_active = true ;
+	state->ratio_pending = false ;
+	state->ratio_activated_this_call = true ;
+} /* src_ratio_block_activate_pending */
+
+static inline double
+src_ratio_current (SRC_STATE *state)
+{	double position ;
+
+	if (!state->ratio_block_active || state->ratio_block_frames <= 0)
+		return state->last_ratio ;
+
+	if (state->ratio_pending && state->ratio_block_position >= state->ratio_block_frames)
+		src_ratio_block_activate_pending (state) ;
+
+	position = state->ratio_block_position / state->ratio_block_frames ;
+	if (position <= 0.0)
+		return state->ratio_block_start ;
+	if (position >= 1.0)
+		return state->ratio_block_target ;
+
+	return state->ratio_block_start +
+			position * (state->ratio_block_target - state->ratio_block_start) ;
+} /* src_ratio_current */
+
+static inline double
+src_ratio_input_increment (SRC_STATE *state, double ratio)
+{	double slope, discriminant, increment ;
+
+	if (!state->ratio_block_active || state->ratio_block_frames <= 0 || ratio <= 0.0)
+		return 1.0 / ratio ;
+
+	/* The ratio is linear in input position. Solve
+	**
+	**     integral (ratio + slope * x) dx = 1
+	**
+	** for the positive input-position increment corresponding to one
+	** output frame. This avoids the cumulative bias of 1 / ratio. */
+	slope = (state->ratio_block_target - state->ratio_block_start) / state->ratio_block_frames ;
+	if (fabs (slope) < 1e-20)
+		return 1.0 / ratio ;
+
+	discriminant = ratio * ratio + 2.0 * slope ;
+	if (discriminant < 0.0)
+		return 1.0 / ratio ;
+
+	increment = (sqrt (discriminant) - ratio) / slope ;
+
+	return increment > 0.0 ? increment : 1.0 / ratio ;
+} /* src_ratio_input_increment */
+
+static inline double
+src_ratio_step (SRC_STATE *state, double ratio)
+{	double increment ;
+
+	increment = src_ratio_input_increment (state, ratio) ;
+	if (state->ratio_block_active && ratio > 0.0)
+		state->ratio_block_position += increment ;
+
+	return increment ;
+} /* src_ratio_step */
+
 
 #endif	/* COMMON_H_INCLUDED */
-

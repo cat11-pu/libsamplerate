@@ -20,6 +20,47 @@
 
 static SRC_STATE *psrc_set_converter (int converter_type, int channels, int *error) ;
 
+static void
+src_ratio_accept_block (SRC_STATE *state, double start, double target, long frames)
+{	long remaining ;
+
+	if (frames <= 0)
+		return ;
+
+	if (!state->ratio_block_active)
+	{	src_ratio_block_begin (state, start, target, frames) ;
+		return ;
+		} ;
+
+	/* The previous block has been played out. */
+	if (state->ratio_block_position >= state->ratio_block_frames)
+	{	state->last_ratio = state->ratio_block_target ;
+
+		if (state->ratio_pending)
+		{	src_ratio_block_activate_pending (state) ;
+			return ;
+			} ;
+
+		state->ratio_block_active = false ;
+		src_ratio_block_begin (state, start, target, frames) ;
+		return ;
+		} ;
+
+	remaining = state->ratio_block_frames - state->ratio_block_input_used ;
+
+	/* This input belongs to the next logical block, but the filter still has
+	** output for the current block. Defer the new ramp until that output has
+	** been produced. */
+	if (remaining <= 0 || frames > remaining)
+	{	if (state->ratio_pending &&
+				fabs (state->ratio_pending_target - target) < 1e-15 &&
+				fabs (state->ratio_pending_start - start) < 1e-15)
+			return ;
+
+		src_ratio_block_set_pending (state, start, target, frames) ;
+		} ;
+} /* src_ratio_accept_block */
+
 
 SRC_STATE *
 src_new (int converter_type, int channels, int *error)
@@ -133,14 +174,75 @@ src_process (SRC_STATE *state, SRC_DATA *data)
 	if (state->last_ratio < (1.0 / SRC_MAX_RATIO))
 		state->last_ratio = data->src_ratio ;
 
+	/* A ratio ramp belongs to one logical input block. An output buffer that
+	** is too small may split that block over several calls; the ramp must
+	** continue across those calls instead of being restarted for each output
+	** buffer. */
+	if (!state->ratio_legacy_mode && data->input_frames > 0)
+		src_ratio_accept_block (state,
+				state->ratio_block_active ? state->ratio_block_target : state->last_ratio,
+				data->src_ratio, data->input_frames) ;
+
 	/* Now process. */
 	if (fabs (state->last_ratio - data->src_ratio) < 1e-15)
 		error = state->vt->const_process (state, data) ;
 	else
 		error = state->vt->vari_process (state, data) ;
 
+	if (error == SRC_ERR_NO_ERROR && state->ratio_block_active && data->input_frames > 0)
+	{	if (state->ratio_pending && !state->ratio_activated_this_call)
+			state->ratio_pending_input_used += data->input_frames_used ;
+		else
+			state->ratio_block_input_used += data->input_frames_used ;
+
+		if (state->ratio_pending &&
+				state->ratio_block_position >= state->ratio_block_frames)
+			src_ratio_block_activate_pending (state) ;
+
+		/* When the current block has been fully played out, make the next
+		** block start exactly at the requested target ratio. */
+		if (!state->ratio_pending && state->ratio_block_active &&
+				state->ratio_block_position >= state->ratio_block_frames)
+		{	state->ratio_block_carry = state->ratio_block_position - state->ratio_block_frames ;
+			state->last_ratio = state->ratio_block_target ;
+			state->ratio_block_active = false ;
+			} ;
+		} ;
+
+	/* src_set_ratio () affects only the next call. */
+	state->ratio_legacy_mode = false ;
+	state->ratio_activated_this_call = false ;
+
 	return error ;
 } /* src_process */
+
+int
+src_process_variable (SRC_STATE *state, SRC_DATA *data, double ratio_start, double ratio_end)
+{
+	if (state == NULL)
+		return SRC_ERR_BAD_STATE ;
+
+	if (state->mode != SRC_MODE_PROCESS)
+		return SRC_ERR_BAD_MODE ;
+
+	if (data == NULL)
+		return SRC_ERR_BAD_DATA ;
+
+	if (is_bad_src_ratio (ratio_start) || is_bad_src_ratio (ratio_end))
+		return SRC_ERR_BAD_SRC_RATIO ;
+
+	state->ratio_legacy_mode = false ;
+
+	/* Start a new ramp for each logical input block. If the output buffer
+	** filled before the block was consumed, continue the existing ramp. */
+	if (data->input_frames > 0)
+		src_ratio_accept_block (state, ratio_start, ratio_end, data->input_frames) ;
+
+	/* src_process () performs the common validation and processing. */
+	data->src_ratio = ratio_end ;
+
+	return src_process (state, data) ;
+} /* src_process_variable */
 
 long
 src_callback_read (SRC_STATE *state, double src_ratio, long frames, float *data)
@@ -247,6 +349,12 @@ src_set_ratio (SRC_STATE *state, double new_ratio)
 		return SRC_ERR_BAD_SRC_RATIO ;
 
 	state->last_ratio = new_ratio ;
+	state->ratio_block_active = false ;
+	state->ratio_block_carry = 0.0 ;
+	state->ratio_pending = false ;
+	state->ratio_pending_input_used = 0 ;
+	state->ratio_activated_this_call = false ;
+	state->ratio_legacy_mode = true ;
 
 	return SRC_ERR_NO_ERROR ;
 } /* src_set_ratio */
@@ -270,6 +378,20 @@ src_reset (SRC_STATE *state)
 
 	state->last_position = 0.0 ;
 	state->last_ratio = 0.0 ;
+	state->ratio_block_start = 0.0 ;
+	state->ratio_block_target = 0.0 ;
+	state->ratio_block_position = 0.0 ;
+	state->ratio_block_carry = 0.0 ;
+	state->ratio_block_frames = 0 ;
+	state->ratio_block_input_used = 0 ;
+	state->ratio_block_active = false ;
+	state->ratio_pending_start = 0.0 ;
+	state->ratio_pending_target = 0.0 ;
+	state->ratio_pending_frames = 0 ;
+	state->ratio_pending_input_used = 0 ;
+	state->ratio_pending = false ;
+	state->ratio_activated_this_call = false ;
+	state->ratio_legacy_mode = false ;
 
 	state->saved_data = NULL ;
 	state->saved_frames = 0 ;
@@ -525,4 +647,3 @@ psrc_set_converter (int converter_type, int channels, int *error)
 
 	return state ;
 } /* psrc_set_converter */
-

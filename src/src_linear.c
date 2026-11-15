@@ -88,7 +88,9 @@ linear_vari_process (SRC_STATE *state, SRC_DATA *data)
 		if (priv->in_used + state->channels * (1.0 + input_index) >= priv->in_count)
 			break ;
 
-		if (priv->out_count > 0 && fabs (state->last_ratio - data->src_ratio) > SRC_MIN_RATIO_DIFF)
+		if (state->ratio_block_active)
+			src_ratio = src_ratio_current (state) ;
+		else if (priv->out_count > 0 && fabs (state->last_ratio - data->src_ratio) > SRC_MIN_RATIO_DIFF)
 			src_ratio = state->last_ratio + priv->out_gen * (data->src_ratio - state->last_ratio) / priv->out_count ;
 
 		for (ch = 0 ; ch < state->channels ; ch++)
@@ -98,7 +100,7 @@ linear_vari_process (SRC_STATE *state, SRC_DATA *data)
 			} ;
 
 		/* Figure out the next index. */
-		input_index += 1.0 / src_ratio ;
+		input_index += src_ratio_step (state, src_ratio) ;
 		} ;
 
 	rem = fmod_one (input_index) ;
@@ -108,7 +110,9 @@ linear_vari_process (SRC_STATE *state, SRC_DATA *data)
 	/* Main processing loop. */
 	while (priv->out_gen < priv->out_count && priv->in_used + state->channels * input_index < priv->in_count)
 	{
-		if (priv->out_count > 0 && fabs (state->last_ratio - data->src_ratio) > SRC_MIN_RATIO_DIFF)
+		if (state->ratio_block_active)
+			src_ratio = src_ratio_current (state) ;
+		else if (priv->out_count > 0 && fabs (state->last_ratio - data->src_ratio) > SRC_MIN_RATIO_DIFF)
 			src_ratio = state->last_ratio + priv->out_gen * (data->src_ratio - state->last_ratio) / priv->out_count ;
 
 #if SRC_DEBUG
@@ -119,13 +123,17 @@ linear_vari_process (SRC_STATE *state, SRC_DATA *data)
 #endif
 
 		for (ch = 0 ; ch < state->channels ; ch++)
-		{	data->data_out [priv->out_gen] = (float) (data->data_in [priv->in_used - state->channels + ch] + input_index *
-						((double) data->data_in [priv->in_used + ch] - data->data_in [priv->in_used - state->channels + ch])) ;
+		{	const float previous = priv->in_used >= state->channels ?
+					data->data_in [priv->in_used - state->channels + ch] :
+					priv->last_value [ch] ;
+
+			data->data_out [priv->out_gen] = (float) (previous + input_index *
+					((double) data->data_in [priv->in_used + ch] - previous)) ;
 			priv->out_gen ++ ;
 			} ;
 
 		/* Figure out the next index. */
-		input_index += 1.0 / src_ratio ;
+		input_index += src_ratio_step (state, src_ratio) ;
 		rem = fmod_one (input_index) ;
 
 		priv->in_used += state->channels * psf_lrint (input_index - rem) ;

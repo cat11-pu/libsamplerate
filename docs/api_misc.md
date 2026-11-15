@@ -118,9 +118,16 @@ Finally, the **src_ratio** field specifies the conversion ratio defined as the
 output sample rate divided by the input sample rate. For a connected set of
 buffers, this value can vary on each call to **src_process** resulting in a
 time varying sample rate conversion process. For time varying sample rate
-conversions, the ratio will be linearly interpolated between the **src_ratio**
-value of the previous call to **src_process** and the value for the current
-call.
+conversions, the ratio is linearly interpolated from the previous target ratio
+to the current **src_ratio** over the logical input block. If the output buffer
+fills before that block is consumed, the ramp continues on the next call rather
+than restarting.
+
+For block-scheduled time stretching where the output must not depend on the
+size of the caller's output buffer, use
+[src_process_variable](api_full.md#variable-ratio-process). It applies an
+explicit `ratio_start`/`ratio_end` ramp to one logical input block and carries
+the exact input phase across continuation calls.
 
 The **input_frames_used** and **output_frames_gen** fields are set by the
 converter to inform the caller of the number of frames consumed from the
